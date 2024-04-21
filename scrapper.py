@@ -12,12 +12,12 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 # Konfiguracja e-maila i bazy danych według oryginalnego skryptu
-config = configparser.ConfigParser()
+config = configparser.ConfigParser(interpolation=None)
 config.read('config.ini')
 email_address = config['email']['address']
 email_password = config['email']['password']
-smtp_server = "smtp.gmail.com"
-smtp_port = 587
+smtp_server = config['email']['smtp_server']
+smtp_port = config['email']['smtp_port']
 
 conn = sqlite3.connect('olx_auctions.db')
 c = conn.cursor()
@@ -48,7 +48,7 @@ def fetch_and_update_selenium():
                     print(f"Skanowanie strony 1 dla URL: {base_url}")
                 url = base_url.format(page_number)
                 driver.get(url)
-                time.sleep(2)  # Daj czas na załadowanie strony
+                time.sleep(3)  # Daj czas na załadowanie strony
 
                 if page_number == 1 and is_full_scan_day:
                     pagination_elements = driver.find_elements(By.CLASS_NAME, "css-1mi714g")
@@ -125,20 +125,17 @@ def send_daily():
         print("Email sent with daily auction summary!")
 
 # Definiowanie URLi bazowych
-base_urls = [
-    "https://www.olx.pl/motoryzacja/samochody/podkarpackie/?page={}&search%5Bfilter_float_price%3Ato%5D=5000&search%5Border%5D=created_at%3Adesc",
-    "https://www.olx.pl/motoryzacja/samochody/podkarpackie/?page={}&search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=10000&search%5Bfilter_enum_condition%5D%5B0%5D=damaged",
-    # Twoje URL-e
-]
+base_urls = [url.strip() for url in config.get('URLs', 'base_urls').split(',')]
 
 start_time = datetime.datetime.now()
 first_task_time = (start_time + datetime.timedelta(minutes=1)).strftime('%H:%M')
 second_task_time = (start_time + datetime.timedelta(minutes=3)).strftime('%H:%M')
+scan_delay = config.get('Settings', 'scan_delay')
 
 # Planowanie zadań
 schedule.every().day.at(first_task_time).do(send_daily).do(reset_full_scan)
 schedule.every().day.at(second_task_time).do(set_to_shallow_scan)
-schedule.every(30).seconds.do(fetch_and_update_selenium)
+schedule.every(int(scan_delay)).seconds.do(fetch_and_update_selenium)
 
 while True:
     schedule.run_pending()
